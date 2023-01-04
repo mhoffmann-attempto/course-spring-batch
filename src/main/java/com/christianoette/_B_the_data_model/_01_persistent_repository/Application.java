@@ -27,7 +27,8 @@ public class Application {
 		ConfigurableApplicationContext appContext = SpringApplication.run(Application.class, args);
 		CourseUtilsDefaultTrigger trigger = appContext.getBean(CourseUtilsDefaultTrigger.class);
 		JobParameters jobParameters = new JobParametersBuilder()
-				.addParameter("outputText", new JobParameter("Hello persistent spring batch job"))
+				.addParameter("outputText", new JobParameter("Hello persistent spring batch job" +
+					" 2nd run"))
 				.toJobParameters();
 		try {
 			trigger.runJobs(jobParameters);
