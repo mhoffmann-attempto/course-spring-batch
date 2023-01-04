@@ -1,9 +1,17 @@
 package com.christianoette._E_validation_and_fault_tolerance._04_fault_tolerance_skip_exception;
 
-import com.christianoette.testutils.CourseUtilBatchTestConfig;
-import com.christianoette.utils.CourseUtilJobSummaryListener;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.batch.core.*;
+import org.springframework.batch.core.BatchStatus;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.step.builder.SimpleStepBuilder;
@@ -23,10 +31,8 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.util.ResourceUtils;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import com.christianoette.testutils.CourseUtilBatchTestConfig;
+import com.christianoette.utils.CourseUtilJobSummaryListener;
 
 @SpringBootTest(classes = {SkipItemsWithExceptionTest.TestConfig.class, CourseUtilBatchTestConfig.class})
 class SkipItemsWithExceptionTest {
@@ -37,7 +43,7 @@ class SkipItemsWithExceptionTest {
     @Test
     void runJob() throws Exception {
         JobParameters jobParameters = new JobParametersBuilder()
-                .toJobParameters();
+            .toJobParameters();
 
         JobExecution jobExecution = jobLauncherTestUtils.launchJob(jobParameters);
         assertEquals(BatchStatus.COMPLETED, jobExecution.getStatus());
@@ -56,30 +62,31 @@ class SkipItemsWithExceptionTest {
         @Bean
         public Job job() {
             return jobBuilderFactory.get("myJob")
-                    .start(readerStep())
-                    .listener(new CourseUtilJobSummaryListener())
-                    .build();
+                .start(readerStep())
+                .listener(new CourseUtilJobSummaryListener())
+                .build();
         }
 
         @Bean
         public Step readerStep() {
             SimpleStepBuilder<SkipTestData, SkipTestData> simpleStepBuilder
-                    = stepBuilderFactory.get("readJsonStep")
-                    .chunk(1);
+                = stepBuilderFactory.get("readJsonStep")
+                .chunk(1);
 
             return simpleStepBuilder.reader(reader())
-                    .processor(new ItemProcessor<SkipTestData, SkipTestData>() {
-                        @Override
-                        public SkipTestData process(SkipTestData item) throws Exception {
-                            if (item.skipIt) {
-                                return null;
-                            } else {
-                                return item;
-                            }
+                .processor(new ItemProcessor<SkipTestData, SkipTestData>() {
+                    @Override
+                    public SkipTestData process(SkipTestData item) throws Exception {
+                        if (item.skipIt) {
+                            throw new CustomSkipException();
+                        } else {
+                            return item;
                         }
-                    })
-                    .writer(writer())
-                    .build();
+                    }
+                })
+                .faultTolerant().skip(CustomSkipException.class).skipLimit(2)
+                .writer(writer())
+                .build();
         }
 
         @Bean
@@ -92,10 +99,10 @@ class SkipItemsWithExceptionTest {
             }
 
             return new JsonItemReaderBuilder<SkipTestData>()
-                    .jsonObjectReader(new JacksonJsonObjectReader<>(SkipTestData.class))
-                    .resource(new FileSystemResource(file))
-                    .name("jsonItemReader")
-                    .build();
+                .jsonObjectReader(new JacksonJsonObjectReader<>(SkipTestData.class))
+                .resource(new FileSystemResource(file))
+                .name("jsonItemReader")
+                .build();
         }
 
         @Bean
@@ -103,10 +110,10 @@ class SkipItemsWithExceptionTest {
             Resource outputResource = new FileSystemResource("output/skipOutput2.json");
 
             return new JsonFileItemWriterBuilder<SkipTestData>()
-                    .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>())
-                    .resource(outputResource)
-                    .name("jsonItemWriter")
-                    .build();
+                .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>())
+                .resource(outputResource)
+                .name("jsonItemWriter")
+                .build();
         }
 
         public static class SkipTestData {
@@ -116,9 +123,9 @@ class SkipItemsWithExceptionTest {
             @Override
             public String toString() {
                 return "SkipTestData{" +
-                        "item='" + item + '\'' +
-                        ", skipIt=" + skipIt +
-                        '}';
+                    "item='" + item + '\'' +
+                    ", skipIt=" + skipIt +
+                    '}';
             }
         }
     }
