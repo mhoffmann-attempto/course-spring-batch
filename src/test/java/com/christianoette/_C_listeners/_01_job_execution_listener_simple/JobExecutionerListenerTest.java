@@ -1,8 +1,11 @@
 package com.christianoette._C_listeners._01_job_execution_listener_simple;
 
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
@@ -23,7 +26,10 @@ class JobExecutionerListenerTest {
 
     @Test
     void test() throws Exception {
-        jobLauncherTestUtils.launchJob(new JobParameters());
+        JobExecution jobExecution = jobLauncherTestUtils.launchJob(new JobParameters());
+
+        assertThat(jobExecution.getExitStatus().getExitDescription())
+            .isEqualTo("custom description");
     }
 
     @Configuration
@@ -39,13 +45,14 @@ class JobExecutionerListenerTest {
         @Bean
         public Job executionListenerJob() {
             Step step = stepBuilderFactory.get("executionListenerStep")
-                    .tasklet((contribution, chunkContext) -> {
-                        return RepeatStatus.FINISHED;
-                    }).build();
+                .tasklet((contribution, chunkContext) -> {
+                    return RepeatStatus.FINISHED;
+                }).build();
 
             return jobBuilderFactory.get("annotationListenerTest")
-                    .start(step)
-                    .build();
+                .start(step)
+                .listener(new SimpleJobListener())
+                .build();
         }
 
         @Bean
