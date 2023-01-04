@@ -1,15 +1,23 @@
 package com.christianoette._A_the_basics._03_scopes;
 
-import com.christianoette.testutils.CourseUtilBatchTestConfig;
-import com.christianoette.utils.CourseUtils;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.batch.core.*;
+import org.springframework.batch.core.BatchStatus;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameter;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
-import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.SimpleStepBuilder;
-import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
 import org.springframework.batch.item.json.JacksonJsonObjectReader;
@@ -27,10 +35,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.util.ResourceUtils;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import com.christianoette.testutils.CourseUtilBatchTestConfig;
 
 @SpringBootTest(classes = {StepScopeTest.TestConfig.class, CourseUtilBatchTestConfig.class})
 class StepScopeTest {
@@ -41,7 +46,10 @@ class StepScopeTest {
     @Test
     void runJob() throws Exception {
         JobParameters jobParameters = new JobParametersBuilder()
-                .toJobParameters();
+            .addParameter("inputPath", new JobParameter("classpath:files/_A/input.json"))
+            .addParameter("outputPath", new JobParameter("output/myOutput.json"))
+            .addParameter("chunkSize", new JobParameter(1L))
+            .toJobParameters();
 
         JobExecution jobExecution = jobLauncherTestUtils.launchJob(jobParameters);
         assertEquals(BatchStatus.COMPLETED, jobExecution.getStatus());
@@ -60,19 +68,20 @@ class StepScopeTest {
         @Bean
         public Job job() {
             return jobBuilderFactory.get("myJob")
-                    .start(readerStep())
-                    .build();
+                .start(readerStep(null))
+                .build();
         }
 
         @Bean
-        public Step readerStep() {
+        @JobScope
+        public Step readerStep(@Value("#{jobParameters['chunkSize']}") final Integer chunkSize) {
             SimpleStepBuilder<InputData, OutputData> simpleStepBuilder
-                    = stepBuilderFactory.get("readJsonStep")
-                    .chunk(1);
+                = stepBuilderFactory.get("readJsonStep")
+                .chunk(chunkSize);
 
-            return simpleStepBuilder.reader(reader())
-                    .processor(processor())
-                    .writer(writer()).build();
+            return simpleStepBuilder.reader(reader(null))
+                .processor(processor())
+                .writer(writer(null)).build();
         }
 
         private ItemProcessor<InputData, OutputData> processor() {
@@ -84,29 +93,31 @@ class StepScopeTest {
         }
 
         @Bean
-        public JsonItemReader<InputData> reader() {
+        @StepScope
+        public JsonItemReader<InputData> reader(@Value("#{jobParameters['inputPath']}") final String inputPath) {
             File file;
             try {
-                file = ResourceUtils.getFile("classpath:files/_A/input.json");
+                file = ResourceUtils.getFile(inputPath);
             } catch (FileNotFoundException ex) {
                 throw new IllegalArgumentException(ex);
             }
             return new JsonItemReaderBuilder<InputData>()
-                    .jsonObjectReader(new JacksonJsonObjectReader<>(InputData.class))
-                    .resource(new FileSystemResource(file))
-                    .name("jsonItemReader")
-                    .build();
+                .jsonObjectReader(new JacksonJsonObjectReader<>(InputData.class))
+                .resource(new FileSystemResource(file))
+                .name("jsonItemReader")
+                .build();
         }
 
         @Bean
-        public JsonFileItemWriter<OutputData> writer() {
-            Resource outputResource = new FileSystemResource("output/output.json");
+        @StepScope
+        public JsonFileItemWriter<OutputData> writer(@Value("#{jobParameters['outputPath']}") String outputPath) {
+            Resource outputResource = new FileSystemResource(outputPath);
 
             return new JsonFileItemWriterBuilder<OutputData>()
-                    .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>())
-                    .resource(outputResource)
-                    .name("jsonItemWriter")
-                    .build();
+                .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>())
+                .resource(outputResource)
+                .name("jsonItemWriter")
+                .build();
         }
 
         public static class InputData {
@@ -115,8 +126,8 @@ class StepScopeTest {
             @Override
             public String toString() {
                 return "InputData{" +
-                        "value='" + value + '\'' +
-                        '}';
+                    "value='" + value + '\'' +
+                    '}';
             }
         }
 
@@ -126,8 +137,8 @@ class StepScopeTest {
             @Override
             public String toString() {
                 return "OutputData{" +
-                        "outputValue='" + outputValue + '\'' +
-                        '}';
+                    "outputValue='" + outputValue + '\'' +
+                    '}';
             }
         }
     }
